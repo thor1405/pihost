@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import Docker from 'dockerode';
 import Project from '../models/Project.js';
 import Deployment from '../models/Deployment.js';
 import { deployStaticSite } from '../services/deploymentService.js';
@@ -92,10 +93,30 @@ export const deleteProject = async (req, res) => {
       return res.status(404).json({ message: 'Project not found' });
     }
 
-    // Attempt to delete physical files
+    // 1. Attempt to delete physical files
     const publicDir = path.join(process.cwd(), 'public_sites', project.subdomain);
     if (fs.existsSync(publicDir)) {
       fs.rmSync(publicDir, { recursive: true, force: true });
+    }
+
+    // 2. Clean up Docker container if it was a PaaS backend
+    const docker = new Docker({ socketPath: process.platform === 'win32' ? '//./pipe/docker_engine' : '/var/run/docker.sock' });
+    const containerName = `pihost-app-${project.subdomain}`;
+    try {
+      const container = docker.getContainer(containerName);
+      await container.stop();
+      await container.remove();
+    } catch (e) {} // Ignore if no container
+
+    // 3. Clean up Nginx config and reload
+    const nginxConfPath = path.join(process.cwd(), 'nginx_conf', `${project.subdomain}.conf`);
+    if (fs.existsSync(nginxConfPath)) {
+      fs.unlinkSync(nginxConfPath);
+      try {
+        const nginxContainer = docker.getContainer('pihost-nginx');
+        const exec = await nginxContainer.exec({ Cmd: ['nginx', '-s', 'reload'] });
+        await exec.start({});
+      } catch (e) {}
     }
 
     await Project.deleteOne({ _id: project._id });

@@ -1,8 +1,12 @@
 import fs from 'fs';
 import path from 'path';
 import AdmZip from 'adm-zip';
+import Docker from 'dockerode';
+import tar from 'tar-fs';
 import Deployment from '../models/Deployment.js';
 import Project from '../models/Project.js';
+
+const docker = new Docker({ socketPath: process.platform === 'win32' ? '//./pipe/docker_engine' : '/var/run/docker.sock' });
 
 export const deployStaticSite = async (zipFilePath, project, deploymentId) => {
   const deployment = await Deployment.findById(deploymentId);
@@ -43,6 +47,98 @@ export const deployStaticSite = async (zipFilePath, project, deploymentId) => {
           fs.renameSync(path.join(singleItemPath, item), path.join(publicDir, item));
         }
         fs.rmdirSync(singleItemPath);
+      }
+    }
+
+    // Phase 6: PaaS Backend Engine Check
+    const hasPackageJson = fs.existsSync(path.join(publicDir, 'package.json'));
+    
+    if (hasPackageJson) {
+      deployment.buildLogs.push('Detected package.json. Building Node.js PaaS container...');
+      await deployment.save();
+
+      // 1. Write Dockerfile
+      fs.writeFileSync(path.join(publicDir, 'Dockerfile'), `
+FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+ENV PORT=3000
+EXPOSE 3000
+CMD ["npm", "start"]
+      `);
+
+      // 2. Build Docker Image
+      const pack = tar.pack(publicDir);
+      const imageName = `pihost-app-${project.subdomain}`;
+      
+      const buildStream = await docker.buildImage(pack, { t: imageName });
+      await new Promise((resolve, reject) => {
+        docker.modem.followProgress(buildStream, (err, res) => err ? reject(err) : resolve(res),
+          (event) => {
+            if (event.stream) deployment.buildLogs.push(event.stream.trim());
+          }
+        );
+      });
+
+      deployment.buildLogs.push('Image built. Starting container...');
+      await deployment.save();
+      
+      // 3. Stop and Remove old container if exists
+      const containerName = `pihost-app-${project.subdomain}`;
+      try {
+        const oldContainer = docker.getContainer(containerName);
+        await oldContainer.stop();
+        await oldContainer.remove();
+      } catch (e) {} // Ignore if it doesn't exist
+
+      // 4. Start New Container
+      const container = await docker.createContainer({
+        Image: imageName,
+        name: containerName,
+        HostConfig: {
+          NetworkMode: 'pihost_pihost-net', // Must match docker-compose network name
+          RestartPolicy: { Name: 'unless-stopped' }
+        }
+      });
+      await container.start();
+      
+      // 5. Write Nginx Config
+      const nginxConfPath = path.join(process.cwd(), 'nginx_conf', `${project.subdomain}.conf`);
+      const nginxConfig = `
+server {
+    listen 80;
+    server_name ~^${project.subdomain}\\.(pihost\\.app|localhost|\\d+\\.\\d+\\.\\d+\\.\\d+\\.nip\\.io)$;
+
+    location / {
+        proxy_pass http://${containerName}:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+      `;
+      
+      const nginxConfDir = path.join(process.cwd(), 'nginx_conf');
+      if (!fs.existsSync(nginxConfDir)) {
+        fs.mkdirSync(nginxConfDir, { recursive: true });
+      }
+      fs.writeFileSync(nginxConfPath, nginxConfig);
+      
+      deployment.buildLogs.push('Routing applied. Reloading Nginx...');
+      await deployment.save();
+      
+      // 6. Reload Nginx
+      try {
+        const nginxContainer = docker.getContainer('pihost-nginx');
+        const exec = await nginxContainer.exec({ Cmd: ['nginx', '-s', 'reload'], AttachStdout: true, AttachStderr: true });
+        await exec.start({});
+      } catch (err) {
+        console.error('Failed to reload nginx', err);
+        deployment.buildLogs.push('Warning: Failed to reload Nginx automatically.');
       }
     }
     

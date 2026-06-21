@@ -22,6 +22,8 @@ services:
       - JWT_SECRET=pihost_super_secret_key_change_me_in_production
     volumes:
       - pihost-public-sites:/app/public_sites
+      - /var/run/docker.sock:/var/run/docker.sock
+      - pihost-nginx-conf:/app/nginx_conf
     depends_on:
       - mongodb
     restart: unless-stopped
@@ -37,6 +39,7 @@ services:
       - "80:80"
     volumes:
       - pihost-public-sites:/public_sites
+      - pihost-nginx-conf:/etc/nginx/conf.d
     depends_on:
       - pihost-server
     restart: unless-stopped
@@ -50,3 +53,4 @@ networks:
 volumes:
   pihost-mongo-data:
   pihost-public-sites:
+  pihost-nginx-conf:

@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Environment Variables
+.env
+.env.*
+!.env.example
+
+# Local Data and Uploads
+server/public_sites/
+server/storage/
+server/uploads/
+
+# Build Outputs
+client/dist/
+dist/
+build/
+
+# OS Files
+.DS_Store
+Thumbs.db

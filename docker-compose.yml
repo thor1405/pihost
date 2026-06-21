@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: pihost-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - pihost-mongo-data:/data/db
+    restart: unless-stopped
+    networks:
+      - pihost-net
+
+  pihost-server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: pihost-server
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - MONGO_URI=mongodb://mongodb:27017/pihost
+      - JWT_SECRET=pihost_super_secret_key_change_me_in_production
+    volumes:
+      - pihost-public-sites:/app/public_sites
+    depends_on:
+      - mongodb
+    restart: unless-stopped
+    networks:
+      - pihost-net
+
+  pihost-nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    container_name: pihost-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - pihost-public-sites:/public_sites
+    depends_on:
+      - pihost-server
+    restart: unless-stopped
+    networks:
+      - pihost-net
+
+networks:
+  pihost-net:
+    driver: bridge
+
+volumes:
+  pihost-mongo-data:
+  pihost-public-sites:

@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Plus, GitBranch, Globe, MoreVertical, Activity, HardDrive, Upload } from 'lucide-react';
+import { Plus, GitBranch, Globe, MoreVertical, Activity, HardDrive, Upload, ExternalLink } from 'lucide-react';
 import { useProjectStore } from '../store/projectStore';
 
 export default function Dashboard() {

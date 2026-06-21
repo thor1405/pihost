@@ -54,14 +54,18 @@ export default function Websites() {
                       <span className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
                     )}
                   </h3>
-                  <a 
-                    href={`http://${project.subdomain}.localhost:5000`} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-primary hover:text-primary/80 flex items-center gap-1 text-sm mt-1 w-fit transition-colors"
-                  >
-                    {project.subdomain}.pihost.app <ExternalLink className="w-3 h-3" />
-                  </a>
+                  {(() => {
+                    const hostname = window.location.hostname;
+                    const port = window.location.port ? `:${window.location.port}` : '';
+                    const url = hostname === 'localhost' || hostname === '127.0.0.1' 
+                      ? `http://${project.subdomain}.localhost${port}`
+                      : `http://${project.subdomain}.${hostname}.nip.io${port}`;
+                    return (
+                      <a href={url} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80 flex items-center gap-1 text-sm mt-1 w-fit transition-colors">
+                        {project.subdomain}.pihost.app <ExternalLink className="w-3 h-3" />
+                      </a>
+                    );
+                  })()}
                   <p className="text-xs text-textMuted mt-2">
                     Last deployed: {new Date(project.updatedAt).toLocaleDateString()}
                   </p>

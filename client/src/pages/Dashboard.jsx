@@ -161,10 +161,19 @@ export default function Dashboard() {
                 </div>
                 <div className="p-4">
                   <h3 className="font-semibold text-lg mb-1 truncate">{project.name}</h3>
-                  <a href={`http://${project.subdomain}.localhost:5000`} target="_blank" rel="noreferrer" className="text-textMuted text-sm hover:text-primary transition-colors block mb-4 truncate">
-                    {project.subdomain}.localhost:5000
-                  </a>
-                  <div className="flex items-center justify-between text-xs">
+                  {(() => {
+                    const hostname = window.location.hostname;
+                    const port = window.location.port ? `:${window.location.port}` : '';
+                    const url = hostname === 'localhost' || hostname === '127.0.0.1' 
+                      ? `http://${project.subdomain}.localhost${port}`
+                      : `http://${project.subdomain}.${hostname}.nip.io${port}`;
+                    return (
+                      <a href={url} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80 flex items-center gap-1 text-sm mt-1 transition-colors">
+                        {project.subdomain}.pihost.app <ExternalLink className="w-3 h-3" />
+                      </a>
+                    );
+                  })()}
+                  <div className="flex items-center justify-between text-xs mt-4">
                     <span className={`px-2 py-1 rounded-md border capitalize ${getStatusColor(project.status)}`}>
                       {project.status}
                     </span>

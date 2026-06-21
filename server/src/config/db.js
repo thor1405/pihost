@@ -1,7 +1,4 @@
 import mongoose from 'mongoose';
-import pkg from 'mongodb-memory-server';
-const { MongoMemoryServer } = pkg;
-
 let mongoServer;
 
 const connectDB = async () => {
@@ -14,7 +11,8 @@ const connectDB = async () => {
   } catch (error) {
     console.log('Local MongoDB not found. Falling back to in-memory MongoDB...');
     try {
-      // Start in-memory MongoDB
+      // Start in-memory MongoDB dynamically so it doesn't crash production if missing
+      const { MongoMemoryServer } = await import('mongodb-memory-server');
       mongoServer = await MongoMemoryServer.create();
       const mongoUri = mongoServer.getUri();
       
